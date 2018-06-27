@@ -2,12 +2,16 @@ var PiggyBreaker = artifacts.require("Piggies");
 
 expect = require("chai").expect; // npm install chai
 
-
-// Ne marche pas
-// const artifacts = require('../build/contracts/Piggies.json')
-// const contract = require('truffle-contract')
-// let PiggyBreaker = contract(artifacts);
-// PiggyBreaker.setProvider(web3.currentProvider);
+// ---------- Module to accelerate time -----------------------
+const jsonrpc = '2.0'
+const id = 0
+const send = (method, params = []) =>
+  web3.currentProvider.send({ id, jsonrpc, method, params })
+const timeTravel = async seconds => {
+  await send('evm_increaseTime', [seconds])
+  await send('evm_mine')
+}
+// ---------- Module to accelerate time (end)------------------
 
 
 var piggyContract;
@@ -19,6 +23,7 @@ contract("Test the PiggyBreaker contract", (accounts) => {
   //   console.log('Deployed')
   // })
 
+  var farmer;
   var nbPiggies;
   var rateLimit;
   var rateCurrent;
@@ -31,6 +36,10 @@ contract("Test the PiggyBreaker contract", (accounts) => {
   var lastContributionFrequency;
 
   var currentPiggy;
+  var previousPiggy;
+
+  var winner;
+  var loser;
 
   it("Deploying the smart contract", async() => {
     piggyContract = await PiggyBreaker.new();
@@ -40,7 +49,7 @@ contract("Test the PiggyBreaker contract", (accounts) => {
   })
 
   it("The farmer variable is the contract owner address", async() => {
-    const farmer = await piggyContract.farmer.call();
+    farmer = await piggyContract.farmer.call();
     assert.equal(farmer.toString(), accounts[0]);
   })
   it("The nbpiggies variable is 1", async() => {
@@ -100,8 +109,11 @@ contract("Test the PiggyBreaker contract", (accounts) => {
       gas: '1000000'
     });
     nbPiggies = (await piggyContract.nbPiggies.call()).toNumber();
-    assert(true);
     let contribution = (await piggyContract.getContributionAmount.call(nbPiggies, accounts[1])).toNumber();
+
+    // currentPiggy = p(await piggyContract.piggies.call(nbPiggies));
+    // console.log('Piggy value 1 : ', currentPiggy.value);
+
     assert((contribution > 0) && (contribution == randomContribution));
   });
   it('allows people to contribute with the minimum contribution', async() => {
@@ -113,6 +125,10 @@ contract("Test the PiggyBreaker contract", (accounts) => {
     });
     nbPiggies = (await piggyContract.nbPiggies.call()).toNumber();
     let contribution = (await piggyContract.getContributionAmount.call(nbPiggies, accounts[2])).toNumber();
+
+    // currentPiggy = p(await piggyContract.piggies.call(nbPiggies));
+    // console.log('Piggy value 2 : ', currentPiggy.value);
+
     assert((contribution > 0) && (contribution == rateCurrent) );
   });
   it('does not allow people to contribute with less than the minimum contribution', async() => {
@@ -129,31 +145,329 @@ contract("Test the PiggyBreaker contract", (accounts) => {
       assert(err);
     }
   });
+  it('does not allow people to break before 5 minutes', async() => {
+    try {
+      await piggyContract.breakPiggy({
+        from: accounts[1],
+        gas: '1000000'
+      });
+      assert(false);
+    } catch (err) {
+      assert(err);
+    }
+  });
+  it('does not allow people to break (afer 5 minutes) if they did not contribute', async() => {
+
+    // ----------------Récupération du bloc-------------------------------------
+    // const blockNumber = web3.eth.blockNumber;
+    // console.log('blockNumber: ', blockNumber);
+    // const currentBlock = await web3.eth.getBlock(blockNumber);
+    // console.log('currentBlock: ', currentBlock.timestamp);
+    // ----------------Récupération du bloc-------------------------------------
+
+    // Wait for 5 minutes
+    await timeTravel(5*60);
+
+    // Try to break the Piggy (without being a contributor)
+    try {
+      await piggyContract.breakPiggy({
+        from: accounts[3],
+        gas: '1000000'
+      });
+      assert(false);
+    } catch (err) {
+      assert(err);
+    }
+
+  });
   it('allows contributors to break the piggy after 5 minutes', async() => {
+    let nbPiggies1 = (await piggyContract.nbPiggies.call()).toNumber();
+    // Try to break the Piggy (while being a contributor)
+    await piggyContract.breakPiggy({
+      from: accounts[1],
+      gas: '1000000'
+    });
+    let nbPiggies2 = (await piggyContract.nbPiggies.call()).toNumber();
+    assert( (nbPiggies1 + 1) == nbPiggies2 );
+  });
+  it('does not player 1 to withdraw before results are known', async() => {
+    try {
+      await piggyContract.withdraw(accounts[1], {
+        from: accounts[1],
+        gas: '1000000'
+      });
+      assert(false);
+    } catch (err) {
+      assert(err);
+    }
+  });
+  it('does not player 2 to withdraw before results are known', async() => {
+    try {
+      await piggyContract.withdraw(accounts[2], {
+        from: accounts[2],
+        gas: '1000000'
+      });
+      assert(false);
+    } catch (err) {
+      assert(err);
+    }
+  });
+  it('does not allow loser to withdraw once results are known', async() => {
+
+    // Contribute to reveal the previous winner
+    rateCurrent = (await piggyContract.rateCurrent.call()).toNumber();
+    await piggyContract.contribute({
+      value: (3*rateCurrent),
+      from: accounts[3],
+      gas: '1000000'
+    });
+
+    // Identify the previous winner
+    nbPiggies = (await piggyContract.nbPiggies.call()).toNumber();
+    previousPiggy = p(await piggyContract.piggies.call(nbPiggies - 1));
+    currentPiggy = p(await piggyContract.piggies.call(nbPiggies));
+    winner = previousPiggy.winner;
+    if (accounts[1] != winner) {
+      loser = accounts[1];
+    } else {
+      loser = accounts[2];
+    }
+
+    try {
+      await piggyContract.withdraw(loser, {
+        from: loser,
+        gas: '1000000'
+      });
+      assert(false);
+    } catch (err) {
+      assert(err);
+    }
+  });
+  it('allows winner to withdraw once results are known', async() => {
+
+    // Identify the previous winner
+    nbPiggies = (await piggyContract.nbPiggies.call()).toNumber();
+    let previousPiggy = p(await piggyContract.piggies.call(nbPiggies - 1));
+    currentPiggy = p(await piggyContract.piggies.call(nbPiggies));
+
+    winner = previousPiggy.winner;
+    const previousBalance = (await web3.eth.getBalance(winner)).toNumber();
+    await piggyContract.withdraw(winner, {
+      from: winner,
+      gas: '1000000'
+    });
+    const newBalance = (await web3.eth.getBalance(winner)).toNumber();
+    var difference = (previousPiggy.value * (10000 - 375) / 10000) - (newBalance - previousBalance);
+
+    // Verify the transaction cost is less than 0.01 ETH
+    // console.log('difference : ', difference);
+    assert( difference < 10000000000000000);
+  });
+  it('does not allow farmer to recover funds before one year', async() => {
+
+    // Wait for 5 minutes
+    await timeTravel(5*60);
+    // Break Piggy
+    await piggyContract.breakPiggy({
+      from: accounts[3],
+      gas: '1000000'
+    });
+
+    // Contribute again to reveal winner
+    // let contribution1 = (await piggyContract.pendingReturnValues.call(accounts[3])).toNumber();
+    // console.log('pendingReturnValues1 : ', contribution1);
+    rateCurrent = (await piggyContract.rateCurrent.call()).toNumber();
+    await piggyContract.contribute({
+      value: (4*rateCurrent),
+      from: accounts[4],
+      gas: '1000000'
+    });
+    // let contribution2 = (await piggyContract.pendingReturnValues.call(accounts[3])).toNumber();
+    // console.log('pendingReturnValues2 : ', contribution2);
+
+    try {
+      await piggyContract.forgottenFundsRecovery(accounts[3], farmer, {
+        from: farmer,
+        gas: '1000000'
+      });
+      assert(false);
+    } catch (err) {
+      assert(err);
+    }
+  });
+  it('allows farmer to recover funds', async() => {
+    // Wait for 5 minutes
+    await timeTravel(365*24*60*60);
+    let pendingReturn1 = (await piggyContract.pendingReturnValues.call(accounts[3])).toNumber();
+    const farmerPreviousBalance = (await web3.eth.getBalance(farmer)).toNumber();
+    await piggyContract.forgottenFundsRecovery(accounts[3], farmer, {
+      from: farmer,
+      gas: '1000000'
+    });
+    let pendingReturn2 = (await piggyContract.pendingReturnValues.call(accounts[3])).toNumber();
+    const farmerNewBalance = (await web3.eth.getBalance(farmer)).toNumber();
+
+    var difference = farmerPreviousBalance + pendingReturn1 - farmerNewBalance;
+
+    // Verify the transaction cost is less than 0.01 ETH
+    assert( (difference < 10000000000000000) && (pendingReturn2 == 0) );
+
+  });
+  it('does not allow people to break (before 5 minutes) before 90 days', async() => {
+    // Break Piggy to start a new one
+    await piggyContract.breakPiggy({
+      from: accounts[4],
+      gas: '1000000'
+    });
+    rateCurrent = (await piggyContract.rateCurrent.call()).toNumber();
+    await piggyContract.contribute({
+      value: (5*rateCurrent),
+      from: accounts[5],
+      gas: '1000000'
+    });
+
+    // Wait for 89 days
+    await timeTravel(89 * 24 * 60 * 60);
 
     rateCurrent = (await piggyContract.rateCurrent.call()).toNumber();
+    await piggyContract.contribute({
+      value: (5*rateCurrent),
+      from: accounts[5],
+      gas: '1000000'
+    });
 
-    // XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-    // ICI ON RECUPERE LE BLOC ACTUEL
-    // console.log('web3 : ', web3.eth);
-    // console.log('getBalance : ', balance);
-    const blockNumber = await web3.eth.getBlockNumber();
-    console.log('blockNumber: ', blockNumber);
-    // const currentBlock = await web3.eth.getBlock(blockNumber);
-    // console.log('currentBlock: ', currentBlock);
+    // Try to break the Piggy (without being a contributor)
+    try {
+      await piggyContract.breakPiggy({
+        from: accounts[5],
+        gas: '1000000'
+      });
+      assert(false);
+    } catch (err) {
+      assert(err);
+    }
 
-    // ICI ON EFFECTUE UN SAUT TEMPOREL
-    // await timeTravel(800); // (à decommenter pour obtenir l'erreur)
-
-    // ICI ON RECUPER LE BLOC APRES LE SAUT TEMPOREL
-    // const blockNumber2 = await web3.eth.getBlockNumber();
-    // console.log('blockNumber2: ', blockNumber2);
-    // const currentBlock2 = await web3.eth.getBlock(blockNumber2);
-    // console.log('currentBlock: ', currentBlock2);
-    // XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-    assert(true);
   });
+  it('allows people to break (before 5 minutes) after 90 days', async() => {
+    // Wait for 1 more day
+    await timeTravel(1 * 24 * 60 * 60);
 
+    rateCurrent = (await piggyContract.rateCurrent.call()).toNumber();
+    await piggyContract.contribute({
+      value: (6*rateCurrent),
+      from: accounts[6],
+      gas: '1000000'
+    });
+
+    let nbPiggies1 = (await piggyContract.nbPiggies.call()).toNumber();
+    // Try to break the Piggy (while being a contributor)
+    await piggyContract.breakPiggy({
+      from: accounts[6],
+      gas: '1000000'
+    });
+    let nbPiggies2 = (await piggyContract.nbPiggies.call()).toNumber();
+    assert( (nbPiggies1 + 1) == nbPiggies2 );
+  });
+  it('does not allow random player to set rate limit', async() => {
+    try {
+      await piggyContract.setRateLimit(10000000000000001, {
+        from: accounts[5],
+        gas: '1000000'
+      });
+      assert(false);
+    } catch (err) {
+      assert(err);
+    }
+  });
+  it('allows farmer to set rate limit', async() => {
+    let rateLimit1 = (await piggyContract.rateLimit.call()).toNumber();
+    await piggyContract.setRateLimit(20000000000000000, {
+      from: farmer,
+      gas: '1000000'
+    });
+    let rateLimit2 = (await piggyContract.rateLimit.call()).toNumber();
+    assert(rateLimit2 == 20000000000000000);
+  });
+  it('does not allow random player to set update period', async() => {
+    try {
+      await piggyContract.setUpdatePeriod((16 * 60), { // Au lieu de 15*60
+        from: accounts[5],
+        gas: '1000000'
+      });
+      assert(false);
+    } catch (err) {
+      assert(err);
+    }
+  });
+  it('allows farmer to set update period', async() => {
+    let updatePeriod1 = (await piggyContract.updatePeriod.call()).toNumber();
+    await piggyContract.setUpdatePeriod((16*60), {
+      from: farmer,
+      gas: '1000000'
+    });
+    let updatePeriod2 = (await piggyContract.updatePeriod.call()).toNumber();
+    assert(updatePeriod2 == (16*60));
+  });
+  it('does not allow random player to set percentage', async() => {
+    try {
+      await piggyContract.setPercentage(2, { // Au lieu de 15*60
+        from: accounts[5],
+        gas: '1000000'
+      });
+      assert(false);
+    } catch (err) {
+      assert(err);
+    }
+  });
+  it('allows farmer to set percentage', async() => {
+    let percentage1 = (await piggyContract.percentage.call()).toNumber();
+    await piggyContract.setPercentage(2, {
+      from: farmer,
+      gas: '1000000'
+    });
+    let percentage2 = (await piggyContract.percentage.call()).toNumber();
+    assert(percentage2 == 2);
+  });
+  it('does not allow random player to set piggy protection time', async() => {
+    try {
+      await piggyContract.setPiggyProtectionTime((7*60), { // Au lieu de 15*60
+        from: accounts[5],
+        gas: '1000000'
+      });
+      assert(false);
+    } catch (err) {
+      assert(err);
+    }
+  });
+  it('allows farmer to set rate piggy protection time', async() => {
+    let piggyProtectionTime1 = (await piggyContract.piggyProtectionTime.call()).toNumber();
+    await piggyContract.setPiggyProtectionTime((7*60), {
+      from: farmer,
+      gas: '1000000'
+    });
+    let piggyProtectionTime2 = (await piggyContract.piggyProtectionTime.call()).toNumber();
+    assert(piggyProtectionTime2 == (7*60));
+  });
+  it('does not allow random player to set piggy protection limit', async() => {
+    try {
+      await piggyContract.setPiggyProtectionLimit((91 * 24 * 60 * 60), { // Au lieu de 15*60
+        from: accounts[5],
+        gas: '1000000'
+      });
+      assert(false);
+    } catch (err) {
+      assert(err);
+    }
+  });
+  it('allows farmer to set rate piggy protection limit', async() => {
+    let piggyProtectionLimit1 = (await piggyContract.piggyProtectionLimit.call()).toNumber();
+    await piggyContract.setPiggyProtectionLimit((91 * 24 * 60 * 60), {
+      from: farmer,
+      gas: '1000000'
+    });
+    let piggyProtectionLimit2 = (await piggyContract.piggyProtectionLimit.call()).toNumber();
+    assert(piggyProtectionLimit2 == (91 * 24 * 60 * 60));
+  });
 })
 
 function p (pg) {
@@ -165,8 +479,7 @@ function p (pg) {
     lastContributionTime: pg[4].toNumber(),
     brokenTime: pg[5].toNumber(),
     brokenBlockNumber: pg[6].toNumber(),
-    contributions: pg[7],
-    winner: pg[8]
+    winner: pg[7]
   }
 }
 
