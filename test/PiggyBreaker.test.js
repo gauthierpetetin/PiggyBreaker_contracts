@@ -446,8 +446,7 @@ contract("Test the PiggyBreaker contract", (accounts) => {
   });
   it('tests the 255 blocks limit', async() => {
     console.log('Block1 : ', web3.eth.blockNumber);
-    // for (var i = 0; i < 260; i++) {
-    for (var i = 0; i < 10; i++) {
+    for (var i = 0; i < 260; i++) {
       await timeTravel(1);
     }
     console.log('Block2 : ', web3.eth.blockNumber);

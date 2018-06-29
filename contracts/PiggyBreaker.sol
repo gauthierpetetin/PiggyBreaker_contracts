@@ -73,7 +73,7 @@ contract Pausable is Farm {
   }
 
   function unpause() public restricted whenPaused returns (bool) {
-    require(newContractAddress == address(0));
+    /* require(newContractAddress == address(0)); */
     paused = false;
     emit Unpause();
     return true;
@@ -108,7 +108,7 @@ contract Piggies is Pausable {
   uint256 public rateNext = rateLimit;
 
   uint256 public updatePeriod = 15 * 60;                      // Every 15 minutes, the minimum contribution rate is updated
-  uint256 public percentage = 1;                              // The growth percentage of the minimum contribution rate is 100%
+  uint256 public percentage = 3;                              // The growth percentage of the minimum contribution rate is 100%
                                                               // Example :
                                                               //   - If the contribution frequency increases, the minimum contribution rate will increase by 100% every 15 minutes
                                                               //   - If the contribution frequency decreases, the minimum contribution rate will decrease by 50% every 15 minutes
@@ -187,6 +187,10 @@ contract Piggies is Pausable {
 
     rateCurrent = rateLimit;
     rateNext = rateLimit;
+
+    localContributionsCounter = 0;
+    lastUpdateDate = now;
+    lastContributionFrequency = 0;
 
     emit PiggyCreated(_piggyID);
   }
