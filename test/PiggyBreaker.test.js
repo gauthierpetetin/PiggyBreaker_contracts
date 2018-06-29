@@ -46,6 +46,21 @@ contract("Test the PiggyBreaker contract", (accounts) => {
     PiggyBreaker.new().then(function(instance) {
       piggyContract = instance;
     })
+
+    // piggyContract.Test1().watch(function(error, result){
+    //   if (!error) {
+    //     console.log('Test1', result);
+    //   } else {
+    //     console.log(error);
+    //   }
+    // });
+    // piggyContract.Test2().watch(function(error, result){
+    //   if (!error) {
+    //     console.log('Test2',  result);
+    //   } else {
+    //     console.log(error);
+    //   }
+    // });
   })
 
   it("The farmer variable is the contract owner address", async() => {
@@ -72,9 +87,9 @@ contract("Test the PiggyBreaker contract", (accounts) => {
     updatePeriod = (await piggyContract.updatePeriod.call()).toNumber();
     assert.equal(updatePeriod, 900);
   })
-  it("The percentage variable is 1%", async() => {
+  it("The percentage variable is 3%", async() => {
     percentage = (await piggyContract.percentage.call()).toNumber();
-    assert.equal(percentage, 1);
+    assert.equal(percentage, 3);
   })
   it("The piggyProtectionTime variable is 300s (5 minutes)", async() => {
     piggyProtectionTime = (await piggyContract.piggyProtectionTime.call()).toNumber();
@@ -190,7 +205,7 @@ contract("Test the PiggyBreaker contract", (accounts) => {
     let nbPiggies2 = (await piggyContract.nbPiggies.call()).toNumber();
     assert( (nbPiggies1 + 1) == nbPiggies2 );
   });
-  it('does not player 1 to withdraw before results are known', async() => {
+  it('does not allow player 1 to withdraw before results are known', async() => {
     try {
       await piggyContract.withdraw(accounts[1], {
         from: accounts[1],
@@ -368,6 +383,84 @@ contract("Test the PiggyBreaker contract", (accounts) => {
     let nbPiggies2 = (await piggyContract.nbPiggies.call()).toNumber();
     assert( (nbPiggies1 + 1) == nbPiggies2 );
   });
+  it('increases the rate when frequency increases', async() => {
+    var rateInitial = (await piggyContract.rateNext.call()).toNumber();
+    console.log('Initial rate 1: ', rateInitial);
+
+    for (var i = 0; i < 16; i++) { // frequency: 3 contrbutions per minute
+      for (var j = 0; j < 3; j++) {
+        await piggyContract.contribute({
+          value: (7*rateCurrent),
+          from: accounts[7],
+          gas: '1000000'
+        });
+      }
+      await timeTravel(60);
+      rateNext = (await piggyContract.rateNext.call()).toNumber();
+      lastContributionFrequency = (await piggyContract.lastContributionFrequency.call()).toNumber();
+      console.log('Minute: ', i,' rate: ', rateNext, 'frequency: ', lastContributionFrequency);
+    }
+    assert(rateInitial < rateNext);
+  });
+  it('decreases the rate when frequency decreases', async() => {
+    var rateInitial = (await piggyContract.rateNext.call()).toNumber();
+    console.log('Initial rate 2: ', rateInitial);
+    for (var i = 0; i < 16; i++) { // frequency: 1 contrbution per minute
+      for (var j = 0; j < 2; j++) {
+        await piggyContract.contribute({
+          value: (7*rateCurrent),
+          from: accounts[7],
+          gas: '1000000'
+        });
+      }
+      await timeTravel(60);
+      rateNext = (await piggyContract.rateNext.call()).toNumber();
+      lastContributionFrequency = (await piggyContract.lastContributionFrequency.call()).toNumber();
+      console.log('Minute: ', i,' rate: ', rateNext, 'frequency: ', lastContributionFrequency);
+    }
+    assert(rateInitial > rateNext);
+  });
+  it('doesnt decrease further than the minimum rate', async() => {
+    var rateInitial = (await piggyContract.rateNext.call()).toNumber();
+    console.log('Initial rate 3: ', rateInitial);
+    for (var i = 0; i < 16; i++) { // frequency: 1 contrbution per minute
+      await piggyContract.contribute({
+        value: (7*rateCurrent),
+        from: accounts[7],
+        gas: '1000000'
+      });
+      await timeTravel(60);
+      rateNext = (await piggyContract.rateNext.call()).toNumber();
+      lastContributionFrequency = (await piggyContract.lastContributionFrequency.call()).toNumber();
+      console.log('Minute: ', i,' rate: ', rateNext, 'frequency: ', lastContributionFrequency);
+    }
+
+    await timeTravel(5*60);
+    await piggyContract.breakPiggy({ // Useful for next test
+      from: accounts[7],
+      gas: '1000000'
+    });
+
+    rateLimit = (await piggyContract.rateLimit.call()).toNumber();
+    assert(rateNext == rateLimit);
+  });
+  it('tests the 255 blocks limit', async() => {
+    console.log('Block1 : ', web3.eth.blockNumber);
+    // for (var i = 0; i < 260; i++) {
+    for (var i = 0; i < 10; i++) {
+      await timeTravel(1);
+    }
+    console.log('Block2 : ', web3.eth.blockNumber);
+    await piggyContract.contribute({
+      value: (8*rateCurrent),
+      from: accounts[8],
+      gas: '1000000'
+    });
+    // Identify the previous winner
+    nbPiggies = (await piggyContract.nbPiggies.call()).toNumber();
+    previousPiggy = p(await piggyContract.piggies.call(nbPiggies - 1));
+    assert(previousPiggy.winner != '0x0000000000000000000000000000000000000000');
+  });
   it('does not allow random player to set rate limit', async() => {
     try {
       await piggyContract.setRateLimit(10000000000000001, {
@@ -468,6 +561,105 @@ contract("Test the PiggyBreaker contract", (accounts) => {
     let piggyProtectionLimit2 = (await piggyContract.piggyProtectionLimit.call()).toNumber();
     assert(piggyProtectionLimit2 == (91 * 24 * 60 * 60));
   });
+  it("allows to transfer tavern ownership", async() => {
+    initialFarmer = (await piggyContract.farmer.call()).toString();
+    await piggyContract.transferFarmOwnership(accounts[9], {
+      from: initialFarmer,
+      gas: '1000000'
+    });
+    newFarmer = (await piggyContract.farmer.call()).toString();
+    await piggyContract.transferFarmOwnership(initialFarmer, {
+      from: accounts[9],
+      gas: '1000000'
+    });
+    farmer = (await piggyContract.farmer.call()).toString();
+    // console.log('initialFarmer', initialFarmer);
+    // console.log('newFarmer', newFarmer);
+    // console.log('farmer', farmer);
+    assert( (newFarmer == accounts[9]) && (farmer == initialFarmer) );
+  })
+  it("does not allow farmer to set new contract address when not paused", async() => {
+    farmer = (await piggyContract.farmer.call()).toString();
+    try {
+      await piggyContract.setNewAddress(accounts[5], {
+        from: farmer,
+        gas: '1000000'
+      });
+      assert(false);
+    } catch (err) {
+      assert(err);
+    }
+  })
+  it("does not allows random player to pause contract", async() => {
+    try {
+      await piggyContract.pause({
+        from: accounts[2],
+        gas: '1000000'
+      });
+      assert(false);
+    } catch (err) {
+      assert(err);
+    }
+  })
+  it("allows farmer to pause contract", async() => {
+    farmer = (await piggyContract.farmer.call()).toString();
+    await piggyContract.pause({
+      from: farmer,
+      gas: '1000000'
+    });
+    try {
+      await piggyContract.contribute({
+        value: (2*rateCurrent),
+        from: accounts[2],
+        gas: '1000000'
+      });
+      assert(false);
+    } catch (err) {
+      assert(err);
+    }
+  })
+  it("does not allow random player to set new contract address when paused", async() => {
+    try {
+      await piggyContract.setNewAddress(accounts[5], {
+        value: (2*rateCurrent),
+        from: accounts[2],
+        gas: '1000000'
+      });
+      assert(false);
+    } catch (err) {
+      assert(err);
+    }
+  })
+  it("allows farmer to set new contract address when paused", async() => {
+    farmer = (await piggyContract.farmer.call()).toString();
+    await piggyContract.setNewAddress(accounts[5], {
+      from: farmer,
+      gas: '1000000'
+    });
+    var newContractAddress = (await piggyContract.newContractAddress.call()).toString();
+    assert(newContractAddress == accounts[5]);
+  })
+  it("does not allow random player to unpause contract", async() => {
+    try {
+      await piggyContract.unpause({
+        from: accounts[2],
+        gas: '1000000'
+      });
+      assert(false);
+    } catch (err) {
+      assert(err);
+    }
+  })
+  it("allows farmer to unpause contract", async() => {
+    var paused1 = await piggyContract.paused.call();
+    farmer = (await piggyContract.farmer.call()).toString();
+    await piggyContract.unpause({
+      from: farmer,
+      gas: '1000000'
+    });
+    var paused2 = await piggyContract.paused.call();
+    assert(paused1 && (!paused2))
+  })
 })
 
 function p (pg) {
