@@ -1,8 +1,7 @@
 # piggybreaker-tests
-Smart Contract tests
+To launch the smart contract tests, open 2 consoles.\n
 
-Open 2 consoles.
-In the first console:
+In the first console:\n
 Install Ganache-cli (a test blockchain)
 ```
 npm install -g ganache-cli
