@@ -3,6 +3,10 @@ To launch the smart contract tests, open 2 consoles.
 
 In the first console:
 
+Install Truffle
+```
+npm install -g truffle
+```
 Install Ganache-cli (a test blockchain)
 ```
 npm install -g ganache-cli
