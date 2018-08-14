@@ -7,6 +7,10 @@ Install Truffle
 ```
 npm install -g truffle
 ```
+Install Chai
+```
+npm install --save-dev chai
+```
 Install Ganache-cli (a test blockchain)
 ```
 npm install -g ganache-cli
