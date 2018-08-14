@@ -13,7 +13,7 @@ npm install --save-dev chai
 ```
 Install babel-polyfill
 ```
-npm install babel-polyfill
+npm install --save babel-polyfill
 ```
 Install Ganache-cli (a test blockchain)
 ```
