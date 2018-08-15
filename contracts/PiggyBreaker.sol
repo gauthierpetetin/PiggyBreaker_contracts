@@ -32,27 +32,35 @@ library SafeMath {
 }
 
 
-contract Farm {
+contract PiggyOwner {
 
   using SafeMath for uint256;
 
+  address public owner;
   address public farmer;
 
   constructor() public {
+    owner = msg.sender;
     farmer = msg.sender;
   }
 
-  modifier restricted() { require(msg.sender == farmer); _; }
+  modifier restricted() { require(msg.sender == owner); _; }
 
-  function transferFarmOwnership(address newFarmer) external restricted {
-    if (newFarmer != address(0)) {
-      farmer = newFarmer;
+  function transferPiggyOwnership(address _newOwner) external restricted {
+    if (_newOwner != address(0)) {
+      owner = _newOwner;
+    }
+  }
+
+  function setFarmerAddress(address _newFarmer) external restricted {
+    if (_newFarmer != address(0)) {
+      farmer = _newFarmer;
     }
   }
 
 }
 
-contract Pausable is Farm {
+contract Pausable is PiggyOwner {
 
   bool public paused = false;
 

@@ -23,6 +23,7 @@ contract("Test the PiggyBreaker contract", (accounts) => {
   //   console.log('Deployed')
   // })
 
+  var owner;
   var farmer;
   var nbPiggies;
   var rateLimit;
@@ -46,23 +47,12 @@ contract("Test the PiggyBreaker contract", (accounts) => {
     PiggyBreaker.new().then(function(instance) {
       piggyContract = instance;
     })
-
-    // piggyContract.Test1().watch(function(error, result){
-    //   if (!error) {
-    //     console.log('Test1', result);
-    //   } else {
-    //     console.log(error);
-    //   }
-    // });
-    // piggyContract.Test2().watch(function(error, result){
-    //   if (!error) {
-    //     console.log('Test2',  result);
-    //   } else {
-    //     console.log(error);
-    //   }
-    // });
   })
 
+  it("The owner variable is the contract owner address", async() => {
+    owner = await piggyContract.owner.call();
+    assert.equal(owner.toString(), accounts[0]);
+  })
   it("The farmer variable is the contract owner address", async() => {
     farmer = await piggyContract.farmer.call();
     assert.equal(farmer.toString(), accounts[0]);
@@ -179,9 +169,8 @@ contract("Test the PiggyBreaker contract", (accounts) => {
     // const currentBlock = await web3.eth.getBlock(blockNumber);
     // console.log('currentBlock: ', currentBlock.timestamp);
     // ----------------Récupération du bloc-------------------------------------
-
     // Wait for 5 minutes
-    await timeTravel(5*60);
+    await timeTravel(5*60 + 1);
 
     // Try to break the Piggy (without being a contributor)
     try {
@@ -197,12 +186,14 @@ contract("Test the PiggyBreaker contract", (accounts) => {
   });
   it('allows contributors to break the piggy after 5 minutes', async() => {
     let nbPiggies1 = (await piggyContract.nbPiggies.call()).toNumber();
+
     // Try to break the Piggy (while being a contributor)
     await piggyContract.breakPiggy({
       from: accounts[1],
       gas: '1000000'
     });
     let nbPiggies2 = (await piggyContract.nbPiggies.call()).toNumber();
+
     assert( (nbPiggies1 + 1) == nbPiggies2 );
   });
   it('does not allow player 1 to withdraw before results are known', async() => {
@@ -278,10 +269,10 @@ contract("Test the PiggyBreaker contract", (accounts) => {
     // console.log('difference : ', difference);
     assert( difference < 10000000000000000);
   });
-  it('does not allow farmer to recover funds before one year', async() => {
+  it('does not allow owner to recover funds before one year', async() => {
 
     // Wait for 5 minutes
-    await timeTravel(5*60);
+    await timeTravel(5*60 + 1);
     // Break Piggy
     await piggyContract.breakPiggy({
       from: accounts[3],
@@ -301,8 +292,8 @@ contract("Test the PiggyBreaker contract", (accounts) => {
     // console.log('pendingReturnValues2 : ', contribution2);
 
     try {
-      await piggyContract.forgottenFundsRecovery(accounts[3], farmer, {
-        from: farmer,
+      await piggyContract.forgottenFundsRecovery(accounts[3], owner, {
+        from: owner,
         gas: '1000000'
       });
       assert(false);
@@ -310,19 +301,19 @@ contract("Test the PiggyBreaker contract", (accounts) => {
       assert(err);
     }
   });
-  it('allows farmer to recover funds', async() => {
+  it('allows owner to recover funds', async() => {
     // Wait for 5 minutes
-    await timeTravel(365*24*60*60);
+    await timeTravel(365*24*60*60 + 1);
     let pendingReturn1 = (await piggyContract.pendingReturnValues.call(accounts[3])).toNumber();
-    const farmerPreviousBalance = (await web3.eth.getBalance(farmer)).toNumber();
-    await piggyContract.forgottenFundsRecovery(accounts[3], farmer, {
-      from: farmer,
+    const ownerPreviousBalance = (await web3.eth.getBalance(owner)).toNumber();
+    await piggyContract.forgottenFundsRecovery(accounts[3], owner, {
+      from: owner,
       gas: '1000000'
     });
     let pendingReturn2 = (await piggyContract.pendingReturnValues.call(accounts[3])).toNumber();
-    const farmerNewBalance = (await web3.eth.getBalance(farmer)).toNumber();
+    const ownerNewBalance = (await web3.eth.getBalance(owner)).toNumber();
 
-    var difference = farmerPreviousBalance + pendingReturn1 - farmerNewBalance;
+    var difference = ownerPreviousBalance + pendingReturn1 - ownerNewBalance;
 
     // Verify the transaction cost is less than 0.01 ETH
     assert( (difference < 10000000000000000) && (pendingReturn2 == 0) );
@@ -365,7 +356,7 @@ contract("Test the PiggyBreaker contract", (accounts) => {
   });
   it('allows people to break (before 5 minutes) after 90 days', async() => {
     // Wait for 1 more day
-    await timeTravel(1 * 24 * 60 * 60);
+    await timeTravel(1 * 24 * 60 * 60 + 1);
 
     rateCurrent = (await piggyContract.rateCurrent.call()).toNumber();
     await piggyContract.contribute({
@@ -471,10 +462,10 @@ contract("Test the PiggyBreaker contract", (accounts) => {
       assert(err);
     }
   });
-  it('allows farmer to set rate limit', async() => {
+  it('allows owner to set rate limit', async() => {
     let rateLimit1 = (await piggyContract.rateLimit.call()).toNumber();
     await piggyContract.setRateLimit(20000000000000000, {
-      from: farmer,
+      from: owner,
       gas: '1000000'
     });
     let rateLimit2 = (await piggyContract.rateLimit.call()).toNumber();
@@ -491,10 +482,10 @@ contract("Test the PiggyBreaker contract", (accounts) => {
       assert(err);
     }
   });
-  it('allows farmer to set update period', async() => {
+  it('allows owner to set update period', async() => {
     let updatePeriod1 = (await piggyContract.updatePeriod.call()).toNumber();
     await piggyContract.setUpdatePeriod((16*60), {
-      from: farmer,
+      from: owner,
       gas: '1000000'
     });
     let updatePeriod2 = (await piggyContract.updatePeriod.call()).toNumber();
@@ -511,10 +502,10 @@ contract("Test the PiggyBreaker contract", (accounts) => {
       assert(err);
     }
   });
-  it('allows farmer to set percentage', async() => {
+  it('allows owner to set percentage', async() => {
     let percentage1 = (await piggyContract.percentage.call()).toNumber();
     await piggyContract.setPercentage(2, {
-      from: farmer,
+      from: owner,
       gas: '1000000'
     });
     let percentage2 = (await piggyContract.percentage.call()).toNumber();
@@ -531,10 +522,10 @@ contract("Test the PiggyBreaker contract", (accounts) => {
       assert(err);
     }
   });
-  it('allows farmer to set rate piggy protection time', async() => {
+  it('allows owner to set rate piggy protection time', async() => {
     let piggyProtectionTime1 = (await piggyContract.piggyProtectionTime.call()).toNumber();
     await piggyContract.setPiggyProtectionTime((7*60), {
-      from: farmer,
+      from: owner,
       gas: '1000000'
     });
     let piggyProtectionTime2 = (await piggyContract.piggyProtectionTime.call()).toNumber();
@@ -551,37 +542,34 @@ contract("Test the PiggyBreaker contract", (accounts) => {
       assert(err);
     }
   });
-  it('allows farmer to set rate piggy protection limit', async() => {
+  it('allows owner to set rate piggy protection limit', async() => {
     let piggyProtectionLimit1 = (await piggyContract.piggyProtectionLimit.call()).toNumber();
     await piggyContract.setPiggyProtectionLimit((91 * 24 * 60 * 60), {
-      from: farmer,
+      from: owner,
       gas: '1000000'
     });
     let piggyProtectionLimit2 = (await piggyContract.piggyProtectionLimit.call()).toNumber();
     assert(piggyProtectionLimit2 == (91 * 24 * 60 * 60));
   });
-  it("allows to transfer tavern ownership", async() => {
-    initialFarmer = (await piggyContract.farmer.call()).toString();
-    await piggyContract.transferFarmOwnership(accounts[9], {
-      from: initialFarmer,
+  it("allows to transfer piggy ownership", async() => {
+    initialOwner = (await piggyContract.owner.call()).toString();
+    await piggyContract.transferPiggyOwnership(accounts[9], {
+      from: initialOwner,
       gas: '1000000'
     });
-    newFarmer = (await piggyContract.farmer.call()).toString();
-    await piggyContract.transferFarmOwnership(initialFarmer, {
+    newOwner = (await piggyContract.owner.call()).toString();
+    await piggyContract.transferPiggyOwnership(initialOwner, {
       from: accounts[9],
       gas: '1000000'
     });
-    farmer = (await piggyContract.farmer.call()).toString();
-    // console.log('initialFarmer', initialFarmer);
-    // console.log('newFarmer', newFarmer);
-    // console.log('farmer', farmer);
-    assert( (newFarmer == accounts[9]) && (farmer == initialFarmer) );
+    owner = (await piggyContract.owner.call()).toString();
+    assert( (newOwner == accounts[9]) && (owner == initialOwner) );
   })
-  it("does not allow farmer to set new contract address when not paused", async() => {
-    farmer = (await piggyContract.farmer.call()).toString();
+  it("does not allow owner to set new contract address when not paused", async() => {
+    owner = (await piggyContract.owner.call()).toString();
     try {
       await piggyContract.setNewAddress(accounts[5], {
-        from: farmer,
+        from: owner,
         gas: '1000000'
       });
       assert(false);
@@ -600,10 +588,10 @@ contract("Test the PiggyBreaker contract", (accounts) => {
       assert(err);
     }
   })
-  it("allows farmer to pause contract", async() => {
-    farmer = (await piggyContract.farmer.call()).toString();
+  it("allows owner to pause contract", async() => {
+    owner = (await piggyContract.owner.call()).toString();
     await piggyContract.pause({
-      from: farmer,
+      from: owner,
       gas: '1000000'
     });
     try {
@@ -629,10 +617,10 @@ contract("Test the PiggyBreaker contract", (accounts) => {
       assert(err);
     }
   })
-  it("allows farmer to set new contract address when paused", async() => {
-    farmer = (await piggyContract.farmer.call()).toString();
+  it("allows owner to set new contract address when paused", async() => {
+    owner = (await piggyContract.owner.call()).toString();
     await piggyContract.setNewAddress(accounts[5], {
-      from: farmer,
+      from: owner,
       gas: '1000000'
     });
     var newContractAddress = (await piggyContract.newContractAddress.call()).toString();
@@ -649,11 +637,11 @@ contract("Test the PiggyBreaker contract", (accounts) => {
       assert(err);
     }
   })
-  it("allows farmer to unpause contract", async() => {
+  it("allows owner to unpause contract", async() => {
     var paused1 = await piggyContract.paused.call();
-    farmer = (await piggyContract.farmer.call()).toString();
+    owner = (await piggyContract.owner.call()).toString();
     await piggyContract.unpause({
-      from: farmer,
+      from: owner,
       gas: '1000000'
     });
     var paused2 = await piggyContract.paused.call();
