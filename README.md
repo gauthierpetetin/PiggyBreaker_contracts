@@ -7,14 +7,6 @@ Install Truffle
 ```
 npm install -g truffle
 ```
-Install Chai [TO BE DELETED AFTER NEXT COMMIT]
-```
-npm install --save-dev chai
-```
-Install babel-polyfil [TO BE DELETED AFTER NEXT COMMIT] 
-```
-npm install --save babel-polyfill
-```
 Install Ganache-cli (a test blockchain)
 ```
 npm install -g ganache-cli
