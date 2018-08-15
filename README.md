@@ -7,11 +7,11 @@ Install Truffle
 ```
 npm install -g truffle
 ```
-Install Chai
+Install Chai [TO BE DELETED AFTER NEXT COMMIT]
 ```
 npm install --save-dev chai
 ```
-Install babel-polyfill
+Install babel-polyfil [TO BE DELETED AFTER NEXT COMMIT] 
 ```
 npm install --save babel-polyfill
 ```
