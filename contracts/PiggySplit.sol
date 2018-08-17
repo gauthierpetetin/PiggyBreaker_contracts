@@ -58,7 +58,7 @@ contract PiggySplit {
   /**
    * @dev Constructor
    * Anthony, David, Gauthier, Matthis, Pablo, Raphael, Sylvain
-   * "0x5007e152e6017d5c331b41cc2636ff0495f360d1", ["0xb5747835141b46f7c472393b31f8f5a57f74a44f", "0x53799fa918c8b4c3e207f684575873e9c5f1b00c", "0xc6f0410a667a5bea528d6bc9efbe10270089bb11", "0xa1ee07042c67e2a0391ba2a418c8fd19522ba130", "0xed9f644c1228644e62a8e3911ca20afb48029e70", "0xc050ca762d1913ba642a8bec6220710667c34f9b", "0x158af3e880835664c396f5d28dab7ee9b73c206f"],["5000", "5000", "26500", "6750", "16750", "26500", "13500"]
+   * ["0xb5747835141b46f7c472393b31f8f5a57f74a44f", "0x53799fa918c8b4c3e207f684575873e9c5f1b00c", "0xc6f0410a667a5bea528d6bc9efbe10270089bb11", "0xa1ee07042c67e2a0391ba2a418c8fd19522ba130", "0xed9f644c1228644e62a8e3911ca20afb48029e70", "0xc050ca762d1913ba642a8bec6220710667c34f9b", "0x158af3e880835664c396f5d28dab7ee9b73c206f"],["5000", "5000", "32205", "6750", "11040", "26505", "13500"]
    */
   constructor(address _piggyContractAddress, address[] _payees, uint256[] _shares) public payable {
     require(_piggyContractAddress != address(0));
